@@ -1,0 +1,273 @@
+name: Publish modelbox images arm
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'new image tag(e.g. v1.1.0)'
+        required: true
+        default: 'latest'
+
+env:
+  BUILD_TYPE: Release
+  IMAGE_VERSION: ${{ github.event.inputs.version }}
+
+jobs:
+  compile_armd_ubuntu:
+    runs-on: ubuntu
+    outputs:
+      BUILD_PLATFORM: ${{ steps.env.outputs.BUILD_PLATFORM }}
+      IMAGE_NAME_DEV: ${{ steps.env.outputs.IMAGE_NAME_DEV }}
+      IMAGE_NAME_RUN: ${{ steps.env.outputs.IMAGE_NAME_RUN }}
+    steps:
+    - name: Set-env
+      id: env
+      run: |
+        echo "::set-output name=BUILD_PLATFORM::$(echo 'linux/arm64')"
+        echo "::set-output name=IMAGE_NAME_DEV::$(echo 'modelbox/modelbox-develop-mindspore_1.6.1-cann_5.0.4-ubuntu-aarch64')"
+        echo "::set-output name=IMAGE_NAME_RUN::$(echo 'modelbox/modelbox-runtime-mindspore_1.6.1-cann_5.0.4-ubuntu-aarch64')"
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: CMake
+      run: |
+        mkdir build && cd build
+        cmake .. -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DLOCAL_PACKAGE_PATH=/opt/thirdparty/source -DWITH_ALL_DEMO=on
+    - name: Build
+      working-directory: ./build
+      run: |
+        make package -j4
+    - name: Release check
+      run: ./docker/artifact_check.sh
+      shell: bash
+    - name: Prepare Artifact
+      run: |
+        mkdir ./artifact
+        cp -af ./build/release ./artifact/
+        ls -lh ./artifact
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: modelbox_armd_ubuntu
+        path: ./artifact
+
+  build_armd_ubuntu_develop_image:
+    runs-on: ubuntu
+    needs: compile_armd_ubuntu
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Download Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: modelbox_armd_ubuntu
+          path: ./
+      - name: Download for dev package
+        run: ./docker/prepare_for_dev.sh
+        shell: bash
+      - name: Build and Push
+        uses: docker/build-push-action@v2
+        with:
+          push: false
+          context: .
+          platforms: ${{ needs.compile_armd_ubuntu.outputs.BUILD_PLATFORM }}
+          file: ./docker/Dockerfile.ascend.develop.ubuntu
+          build-args: |
+            PLATFORM=${{ needs.compile_armd_ubuntu.outputs.BUILD_PLATFORM }}
+          tags: |
+            ${{ needs.compile_armd_ubuntu.outputs.IMAGE_NAME_DEV }}:latest
+            ${{ needs.compile_armd_ubuntu.outputs.IMAGE_NAME_DEV }}:${{ env.IMAGE_VERSION }}
+
+  build_armd_ubuntu_runtime_image:
+    runs-on: ubuntu
+    needs: compile_armd_ubuntu
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Download Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: modelbox_armd_ubuntu
+          path: ./
+      - name: Download for run package
+        run: ./docker/prepare_for_run.sh
+        shell: bash
+      - name: Build and Push
+        uses: docker/build-push-action@v2
+        with:
+          push: false
+          context: .
+          platforms: ${{ needs.compile_armd_ubuntu.outputs.BUILD_PLATFORM }}
+          file: ./docker/Dockerfile.ascend.runtime.ubuntu
+          build-args: |
+            PLATFORM=${{ needs.compile_armd_ubuntu.outputs.BUILD_PLATFORM }}
+          tags: |
+            ${{ needs.compile_armd_ubuntu.outputs.IMAGE_NAME_RUN }}:latest
+            ${{ needs.compile_armd_ubuntu.outputs.IMAGE_NAME_RUN }}:${{ env.IMAGE_VERSION }}
+
+  test_armd_ubuntu:
+    runs-on: ubuntu
+    needs: [compile_armd_ubuntu,build_armd_ubuntu_develop_image]
+    container:
+      image: ${{ needs.compile_armd_ubuntu.outputs.IMAGE_NAME_DEV }}:${{ github.event.inputs.version }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: CMake
+      run: |
+        mkdir build && cd build
+        cmake .. -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DLOCAL_PACKAGE_PATH=/opt/thirdparty/source -DWITH_ALL_DEMO=on
+    - name: Build
+      working-directory: build
+      run: |
+        make package -j4
+    - name: Release check
+      run: ./docker/artifact_check.sh
+      shell: bash
+    - name: Test
+      working-directory: build
+      run: | 
+        make build-test -j4
+        unset LD_LIBRARY_PATH
+        make unittest
+
+  compile_armd_openeuler:
+    runs-on: openeuler
+    outputs:
+      BUILD_PLATFORM: ${{ steps.env.outputs.BUILD_PLATFORM }}
+      IMAGE_NAME_DEV: ${{ steps.env.outputs.IMAGE_NAME_DEV }}
+      IMAGE_NAME_RUN: ${{ steps.env.outputs.IMAGE_NAME_RUN }}
+    steps:
+    - name: Set-env
+      id: env
+      run: |
+        echo "::set-output name=BUILD_PLATFORM::$(echo 'linux/arm64')"
+        echo "::set-output name=IMAGE_NAME_DEV::$(echo 'modelbox/modelbox-develop-mindspore_1.6.1-cann_5.0.4-openeuler-aarch64')"
+        echo "::set-output name=IMAGE_NAME_RUN::$(echo 'modelbox/modelbox-runtime-mindspore_1.6.1-cann_5.0.4-openeuler-aarch64')"
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: CMake
+      run: |
+        mkdir build && cd build
+        cmake .. -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DLOCAL_PACKAGE_PATH=/opt/thirdparty/source -DWITH_ALL_DEMO=on
+    - name: Build
+      working-directory: ./build
+      run: |
+        make package -j8
+    - name: Release check
+      run: ./docker/artifact_check.sh
+      shell: bash
+    - name: Prepare Artifact
+      run: |
+        mkdir ./artifact
+        cp -af ./build/release ./artifact/
+        ls -lh ./artifact
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: modelbox_armd_openeuler
+        path: ./artifact
+
+  build_armd_openeuler_develop_image:
+    runs-on: openeuler
+    needs: compile_armd_openeuler
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Download Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: modelbox_armd_openeuler
+          path: ./
+      - name: Download for dev package
+        run: ./docker/prepare_for_dev.sh
+        shell: bash
+      - name: Build and Push
+        uses: docker/build-push-action@v2
+        with:
+          push: false
+          context: .
+          platforms: ${{ needs.compile_armd_openeuler.outputs.BUILD_PLATFORM }}
+          file: ./docker/Dockerfile.ascend.develop.openeuler
+          tags: |
+            ${{ needs.compile_armd_openeuler.outputs.IMAGE_NAME_DEV }}:latest
+            ${{ needs.compile_armd_openeuler.outputs.IMAGE_NAME_DEV }}:${{ env.IMAGE_VERSION }}
+
+  build_armd_openeuler_runtime_image:
+    runs-on: openeuler
+    needs: compile_armd_openeuler
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Download Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: modelbox_armd_openeuler
+          path: ./
+      - name: Download for run package
+        run: ./docker/prepare_for_run.sh
+        shell: bash
+      - name: Build and Push
+        uses: docker/build-push-action@v2
+        with:
+          push: false
+          context: .
+          platforms: ${{ needs.compile_armd_openeuler.outputs.BUILD_PLATFORM }}
+          file: ./docker/Dockerfile.ascend.runtime.openeuler
+          build-args: |
+            PLATFORM=${{ needs.compile_armd_openeuler.outputs.BUILD_PLATFORM }}
+          tags: |
+            ${{ needs.compile_armd_openeuler.outputs.IMAGE_NAME_RUN }}:latest
+            ${{ needs.compile_armd_openeuler.outputs.IMAGE_NAME_RUN }}:${{ env.IMAGE_VERSION }}
+
+  test_armd_openeuler:
+    runs-on: openeuler
+    needs: [compile_armd_openeuler,build_armd_openeuler_develop_image]
+    container:
+      image: ${{ needs.compile_armd_openeuler.outputs.IMAGE_NAME_DEV }}:${{ github.event.inputs.version }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: CMake
+      run: |
+        mkdir build && cd build
+        cmake .. -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DLOCAL_PACKAGE_PATH=/opt/thirdparty/source -DWITH_ALL_DEMO=on
+    - name: Build
+      working-directory: build
+      run: |
+        make package -j4
+    - name: Release check
+      run: ./docker/artifact_check.sh
+      shell: bash
+    - name: Test
+      working-directory: build
+      run: | 
+        make build-test -j4
+        unset LD_LIBRARY_PATH
+        make unittest

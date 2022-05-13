@@ -2,7 +2,6 @@ ARG BASE_IMAGE=ubuntu:18.04
 FROM ${BASE_IMAGE} as base
 
 COPY release /opt/release
-COPY ldconfig.service /etc/systemd/system/
 ADD *.tar.gz /usr/local/
 
 ARG CUDA_VER
@@ -114,7 +113,7 @@ RUN python3 -m pip install --no-cache-dir /opt/release/python/modelbox-*.whl && 
     echo "/usr/local/nvidia/lib" >> /etc/ld.so.conf.d/nvidia.conf && \
     echo "/usr/local/nvidia/lib64" >> /etc/ld.so.conf.d/nvidia.conf && \
     sed -i "32aPermitRootLogin yes" /etc/ssh/sshd_config && \
-    ldconfig &>/dev/null && systemctl enable modelbox ssh ldconfig && \
+    ldconfig &>/dev/null && systemctl enable modelbox ssh && \
     echo 'export TMOUT=0' >> /etc/bash.bashrc && \
     echo 'export HISTSIZE=1000' >> /etc/bash.bashrc && \
     echo '[ -n "${SSH_TTY}" ] && export $(cat /proc/1/environ|tr "\\0" "\\n"|xargs)' >> /etc/bash.bashrc && \

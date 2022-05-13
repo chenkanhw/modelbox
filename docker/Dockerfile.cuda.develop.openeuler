@@ -2,7 +2,6 @@ ARG BASE_IMAGE=openeuler/openeuler:20.03-lts-sp3
 FROM ${BASE_IMAGE} as base
 
 COPY release /opt/release
-COPY ldconfig.service /etc/systemd/system/
 COPY docker/repo/*.repo /etc/yum.repos.d/
 
 ADD *.tar.gz /usr/local/
@@ -104,7 +103,7 @@ RUN python3 -m pip install --no-cache-dir /opt/release/python/modelbox-*.whl && 
     echo "/usr/local/lib64" >>/etc/ld.so.conf && \
     echo "/usr/local/nvidia/lib" >> /etc/ld.so.conf.d/nvidia.conf && \
     echo "/usr/local/nvidia/lib64" >> /etc/ld.so.conf.d/nvidia.conf && \
-    ldconfig &>/dev/null && systemctl enable modelbox sshd ldconfig && \
+    ldconfig &>/dev/null && systemctl enable modelbox sshd && \
     sed -i '/TMOUT/s/300/0/g' /etc/bashrc && \
     echo 'HISTSIZE=1000' >> /etc/bashrc && \
     echo "export PKG_CONFIG_PATH=/usr/local/lib64/pkgconfig" > /etc/profile.d/pkgconfig.sh && \

@@ -2,7 +2,6 @@ ARG BASE_IMAGE=ubuntu:18.04
 FROM ${BASE_IMAGE} as base
 
 COPY release /opt/release
-COPY ldconfig.service /etc/systemd/system/
 ADD *.tar.gz /usr/local/
 
 ARG CUDA_VER
@@ -93,7 +92,7 @@ RUN python3 -m pip install --no-cache-dir /opt/release/python/modelbox-*.whl && 
     sed -i 's/^SystemMaxUse=.*/SystemMaxUse=16M/g' /etc/systemd/journald.conf && \
     sed -i '/ForwardToSyslog/s/^#//g' /etc/systemd/journald.conf && \
     sed -i 's/^\(module(load="imklog")\)/#\1/' /etc/rsyslog.conf && \
-    ldconfig &>/dev/null && systemctl enable modelbox ldconfig
+    ldconfig &>/dev/null && systemctl enable modelbox
 
 VOLUME ["/sys/fs/cgroup", "/tmp", "/run", "/run/lock"]
 STOPSIGNAL SIGRTMIN+3

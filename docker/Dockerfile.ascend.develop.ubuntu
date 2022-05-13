@@ -2,7 +2,6 @@ FROM modelbox/modelbox-ascend-ubuntu:latest
 FROM ubuntu:18.04
 
 COPY release /opt/release
-COPY ldconfig.service /etc/systemd/system/
 COPY --from=0 /usr/local/Ascend_dev /usr/local/Ascend
 
 ADD *.tar.gz /usr/local/
@@ -30,17 +29,18 @@ ${ASCEND_PATH}/ascend-toolkit/latest/fwkacllib/python/site-packages:\
 ${ASCEND_PATH}/ascend-toolkit/latest/opp/op_impl/build-in/ai_core/tbe:\
 ${ASCEND_PATH}/ascend-toolkit/latest/pyACL/python/site-packages/acl${PYTHONPATH:+:${PYTHONPATH}}
 
-ENV LD_LIBRARY_PATH=${ASCEND_PATH}/ascend-toolkit/latest/fwkacllib/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+ENV LD_LIBRARY_PATH=${ASCEND_PATH}/ascend-toolkit/latest/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
 
 WORKDIR /root
 
 RUN ln -snf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo "Asia/Shanghai" > /etc/timezone && \
+    if [ "$(arch)" = "aarch64" ];then sed -i 's@ports.ubuntu.com@mirrors.ustc.edu.cn@g' /etc/apt/sources.list;fi && \
+    rm -rf /var/lib/dpkg/info/* && \
     apt update && apt upgrade -y && \
     apt remove --purge python3-apt && \
-    apt install -y python3.7-dev python3-pip python3-apt python3-setuptools && \
+    apt install -y python3.7-dev python3-pip python3-apt python3-setuptools apt-utils && \
     apt install --no-install-recommends -y \
-        dbus systemd systemd-cron rsyslog iproute2 gnupg2 curl libcurl4-openssl-dev ca-certificates && \
-    apt install -y \
+        dbus systemd systemd-cron rsyslog iproute2 gnupg2 curl libcurl4-openssl-dev ca-certificates \
         build-essential unzip ffmpeg sudo bash vim gdb git doxygen autoconf cmake gettext openssh-server \
         python3-wheel python3-numpy python3-opencv libopencv-dev pkg-config kmod net-tools pciutils \
         libssl-dev libcpprest-dev libswscale-dev libavformat-dev graphviz libgraphviz-dev libfuse-dev \
@@ -56,21 +56,23 @@ RUN mkdir -p /root/.pip && \
     echo "index-url = https://pypi.python.org/simple" >>/root/.pip/pip.conf && \
     echo "trusted-host = pypi.python.org" >>/root/.pip/pip.conf && \
     echo "timeout = 120" >>/root/.pip/pip.conf && \
+    if [ "$(arch)" = "aarch64" ];then sed -i 's@python.org@douban.com@g' /root/.pip/pip.conf;fi && \
     groupadd HwHiAiUser && \
     useradd -g HwHiAiUser -d /home/HwHiAiUser -m HwHiAiUser && \
     python3 -m pip install --upgrade pip && \
     python3 -m pip install --no-cache-dir wheel attrs psutil decorator numpy protobuf scipy sympy cffi grpcio grpcio-tools requests pillow pyyaml opencv-python && \
-    python3 -m pip install --no-cache-dir https://ms-release.obs.cn-north-4.myhuaweicloud.com/1.6.1/MindSpore/ascend/x86_64/mindspore_ascend-1.6.1-cp37-cp37m-linux_x86_64.whl && \
-    python3 -m pip install --no-cache-dir ${ASCEND_PATH}/ascend-toolkit/latest/fwkacllib/lib64/topi-0.4.0-py3-none-any.whl && \
-    python3 -m pip install --no-cache-dir ${ASCEND_PATH}/ascend-toolkit/latest/fwkacllib/lib64/te-0.4.0-py3-none-any.whl && \
-    python3 -m pip install --no-cache-dir ${ASCEND_PATH}/ascend-toolkit/latest/fwkacllib/lib64/hccl-0.1.0-py3-none-any.whl && \
+    python3 -m pip install --no-cache-dir https://ms-release.obs.cn-north-4.myhuaweicloud.com/1.6.1/MindSpore/ascend/$(arch)/mindspore_ascend-1.6.1-cp37-cp37m-linux_$(arch).whl && \
+    python3 -m pip install --no-cache-dir ${ASCEND_PATH}/ascend-toolkit/latest/lib64/topi-0.4.0-py3-none-any.whl && \
+    python3 -m pip install --no-cache-dir ${ASCEND_PATH}/ascend-toolkit/latest/lib64/te-0.4.0-py3-none-any.whl && \
+    python3 -m pip install --no-cache-dir ${ASCEND_PATH}/ascend-toolkit/latest/lib64/hccl-0.1.0-py3-none-any.whl && \
     echo "/usr/local/lib" >>  /etc/ld.so.conf && \
     echo "${ASCEND_PATH}/driver/lib64" >>/etc/ld.so.conf && \
-    echo "${ASCEND_PATH}/ascend-toolkit/latest/x86_64-linux/lib64" >>/etc/ld.so.conf && \
+    echo "${ASCEND_PATH}/ascend-toolkit/latest/lib64" >>/etc/ld.so.conf && \
     echo "/usr/local/lib/python3.7/dist-packages/mindspore/lib" >>/etc/ld.so.conf
 
-RUN curl https://nodejs.org/dist/v16.13.2/node-v16.13.2-linux-x64.tar.xz|tar -xJ && \
-    cp -af node-v16.13.2-linux-x64/* /usr/local/ && \
+RUN if [ "$(arch)" = "aarch64" ];then node_arch="arm64";else node_arch="x64";fi && \
+    curl https://nodejs.org/dist/v16.13.2/node-v16.13.2-linux-${node_arch}.tar.xz|tar -xJ && \
+    cp -af node-v16.13.2-linux-${node_arch}/* /usr/local/ && \
     npm install -g npm@latest && npm -v && node -v && \
     npm install -g @angular/cli && \
     npm cache clean --force && rm -rf /root/* && \
@@ -90,7 +92,7 @@ RUN curl https://nodejs.org/dist/v16.13.2/node-v16.13.2-linux-x64.tar.xz|tar -xJ
     sed -i 's/^SystemMaxUse=.*/SystemMaxUse=16M/g' /etc/systemd/journald.conf && \
     sed -i '/ForwardToSyslog/s/^#//g' /etc/systemd/journald.conf && \
     sed -i 's/^\(module(load="imklog")\)/#\1/' /etc/rsyslog.conf && \
-    ldconfig &>/dev/null && systemctl enable modelbox ssh ldconfig && \
+    ldconfig &>/dev/null && systemctl enable modelbox ssh && \
     echo 'export TMOUT=0' >> /etc/bash.bashrc && \
     echo 'export HISTSIZE=1000' >> /etc/bash.bashrc && \
     echo '[ -n "${SSH_TTY}" ] && export $(cat /proc/1/environ|tr "\\0" "\\n"|xargs)' >> /etc/bash.bashrc && \

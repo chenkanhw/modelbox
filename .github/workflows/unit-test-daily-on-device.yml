@@ -19,6 +19,7 @@ jobs:
             - tensorrt
             - pytorch
             - tensorflow
+            - openeuler
 
     steps:
     - uses: actions/checkout@v2

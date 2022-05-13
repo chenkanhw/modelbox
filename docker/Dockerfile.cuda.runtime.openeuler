@@ -2,7 +2,6 @@ ARG BASE_IMAGE=openeuler/openeuler:20.03-lts-sp3
 FROM ${BASE_IMAGE} as base
 
 COPY release /opt/release
-COPY ldconfig.service /etc/systemd/system/
 COPY docker/repo/*.repo /etc/yum.repos.d/
 
 ADD *.tar.gz /usr/local/
@@ -89,7 +88,7 @@ RUN python3 -m pip install --no-cache-dir /opt/release/python/modelbox-*.whl && 
     echo "/usr/local/nvidia/lib64" >> /etc/ld.so.conf.d/nvidia.conf && \
     echo "export PKG_CONFIG_PATH=/usr/local/lib64/pkgconfig" > /etc/profile.d/pkgconfig.sh && \
     sed -i 's/^\(module(load="imklog")\)/#\1/' /etc/rsyslog.conf && \
-    ldconfig &>/dev/null && systemctl enable modelbox ldconfig
+    ldconfig &>/dev/null && systemctl enable modelbox
 
 VOLUME ["/sys/fs/cgroup", "/tmp", "/run", "/run/lock"]
 STOPSIGNAL SIGRTMIN+3
